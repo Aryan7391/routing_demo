@@ -634,9 +634,24 @@ function assignQueue(v) {
   batch.forEach(o => { o.asgn = v.id; o.status = 'pending'; O.push(o); });
   nQ = Math.max(0, nQ - batch.length);
   v.stops = interleave(v, batch);
-  v.cur = 0; v.load = 0; v.status = 'active';
+  v.cur = 0; v.load = 0; v.status = 'active'; v.trail = [];
   addLog(`V${v.id + 1} picked up ${batch.length} queued order${batch.length > 1 ? 's' : ''}`, '#f59e0b');
   updStats();
+
+  // Immediately check if other idle vehicles can also absorb remaining queue
+  if (Q.length > 0) {
+    for (const other of V) {
+      if (!Q.length) break;
+      if (other.status !== 'idle' || other.id === v.id) continue;
+      const next = Q.splice(0, Math.min(5, Q.length));
+      next.forEach(o => { o.asgn = other.id; o.status = 'pending'; O.push(o); });
+      nQ = Math.max(0, nQ - next.length);
+      other.stops = interleave(other, next);
+      other.cur = 0; other.load = 0; other.status = 'active'; other.trail = [];
+      addLog(`V${other.id + 1} also took ${next.length} queued order${next.length > 1 ? 's' : ''}`, '#f59e0b');
+      updStats();
+    }
+  }
 }
 
 function inject() {
@@ -644,6 +659,7 @@ function inject() {
     status: 'pending', asgn: -1, live: true, pickedUp: false, delivered: false };
 
   const PROXIMITY = Math.min(W, H) * 0.22;
+  const allIdle = V.every(v => v.status === 'idle');
 
   const sorted = [...V].sort((a, b) => dst(a, o.pickup) - dst(b, o.pickup));
 
@@ -652,12 +668,15 @@ function inject() {
     const distToPickup = dst(v, o.pickup);
 
     if (v.status === 'idle') {
-      if (distToPickup <= PROXIMITY) {
+      // If all vehicles are idle, nearest one takes it unconditionally
+      // Otherwise apply proximity check
+      if (allIdle || distToPickup <= PROXIMITY) {
         o.asgn = v.id; O.push(o);
         v.stops = interleave(v, [o]);
         v.cur = 0; v.load = 0; v.status = 'active'; v.trail = [];
         nInj++;
-        addLog(`Live #${o.id} → V${v.id + 1} (idle, nearby direct assign)`, '#ec4899');
+        const reason = allIdle ? 'all idle, nearest assigned' : 'idle, nearby';
+        addLog(`Live #${o.id} → V${v.id + 1} (${reason})`, '#ec4899');
         done = true; break;
       }
       continue;
