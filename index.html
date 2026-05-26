@@ -509,26 +509,12 @@ function addLog(msg, color) {
   const el = document.getElementById('log');
   const empty = el.querySelector('.log-empty');
   if (empty) empty.remove();
-
   const d = document.createElement('div');
   d.className = 'le';
-
-  const t = new Date().toLocaleTimeString('en', {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit'
-  });
-
-  d.innerHTML =
-    `<div class="le-dot" style="background:${color}"></div>
-     <div class="le-text">${msg}</div>
-     <div class="le-time">${t}</div>`;
-
+  const t = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  d.innerHTML = `<div class="le-dot" style="background:${color}"></div><div class="le-text">${msg}</div><div class="le-time">${t}</div>`;
   el.insertBefore(d, el.firstChild);
-
-  while (el.children.length > 60)
-    el.removeChild(el.lastChild);
+  while (el.children.length > 60) el.removeChild(el.lastChild);
 }
 
 function updStats() {
@@ -540,437 +526,379 @@ function updStats() {
 
 function interleave(veh, orders) {
   const stops = [];
-  let pos = { x: veh.x, y: veh.y };
-  let load = 0;
-
-  const unassigned = [...orders];
-  const inVeh = [];
-
+  let pos = { x: veh.x, y: veh.y }, load = 0;
+  const unassigned = [...orders], inVeh = [];
   while (unassigned.length || inVeh.length) {
-
     const cands = [];
-
-    for (const o of unassigned)
-      if (load + 1 <= veh.cap)
-        cands.push({ t:'p', o, pt:o.pickup });
-
-    for (const o of inVeh)
-      cands.push({ t:'d', o, pt:o.delivery });
-
+    for (const o of unassigned) if (load + 1 <= veh.cap) cands.push({ t: 'p', o, pt: o.pickup });
+    for (const o of inVeh) cands.push({ t: 'd', o, pt: o.delivery });
     if (!cands.length) break;
-
-    cands.sort((a,b)=>dst(pos,a.pt)-dst(pos,b.pt));
-
+    cands.sort((a, b) => dst(pos, a.pt) - dst(pos, b.pt));
     const nx = cands[0];
-
-    if (nx.t === 'p') {
-      load++;
-      inVeh.push(nx.o);
-      unassigned.splice(unassigned.indexOf(nx.o),1);
-    } else {
-      load--;
-      inVeh.splice(inVeh.indexOf(nx.o),1);
-    }
-
-    stops.push({
-      t:nx.t,
-      o:nx.o,
-      pt:{...nx.pt},
-      done:false
-    });
-
-    pos = {...nx.pt};
+    if (nx.t === 'p') { load++; inVeh.push(nx.o); unassigned.splice(unassigned.indexOf(nx.o), 1); }
+    else { load--; inVeh.splice(inVeh.indexOf(nx.o), 1); }
+    stops.push({ t: nx.t, o: nx.o, pt: { ...nx.pt }, done: false });
+    pos = { ...nx.pt };
   }
-
   return stops;
 }
 
 function generate() {
-
   const nVeh = +document.getElementById('nV').value;
   const nOrd = +document.getElementById('nO').value;
-
-  V=[]; O=[]; Q=[];
-
-  nDel=0;
-  nPick=0;
-  nInj=0;
-  nQ=0;
-
-  document.getElementById('log').innerHTML =
-    '<div class="log-empty">— dispatching —</div>';
-
+  V = []; O = []; Q = [];
+  nDel = 0; nPick = 0; nInj = 0; nQ = 0;
+  document.getElementById('log').innerHTML = '<div class="log-empty">— dispatching —</div>';
   updStats();
 
-  for(let i=0;i<nVeh;i++) {
-
+  for (let i = 0; i < nVeh; i++) {
     const p = rp();
-
-    V.push({
-      id:i,
-      x:p.x,
-      y:p.y,
-      col:VCOLS[i % VCOLS.length],
-      stops:[],
-      cur:0,
-      load:0,
-      cap:5 + Math.floor(Math.random()*5),
-      status:'idle',
-      trail:[]
-    });
+    V.push({ id: i, x: p.x, y: p.y, col: VCOLS[i % VCOLS.length],
+      stops: [], cur: 0, load: 0, cap: 5 + Math.floor(Math.random() * 5), status: 'idle', trail: [] });
   }
 
-  for(let i=0;i<nOrd;i++) {
-
-    O.push({
-      id:i,
-      pickup:rp(),
-      delivery:rp(),
-      status:'pending',
-      asgn:-1,
-      live:false,
-      pickedUp:false,
-      delivered:false
-    });
+  for (let i = 0; i < nOrd; i++) {
+    O.push({ id: i, pickup: rp(), delivery: rp(),
+      status: 'pending', asgn: -1, live: false, pickedUp: false, delivered: false });
   }
 
   O.forEach(o => {
-
-    let best=-1;
-    let bd=Infinity;
-
-    V.forEach((v,i)=>{
-      const d = dst(v,o.pickup);
-
-      if(d<bd){
-        bd=d;
-        best=i;
-      }
-    });
-
-    o.asgn=best;
+    let best = -1, bd = Infinity;
+    V.forEach((v, i) => { const d = dst(v, o.pickup); if (d < bd) { bd = d; best = i; } });
+    o.asgn = best;
   });
 
   V.forEach(v => {
-
-    const asgn = O.filter(o=>o.asgn===v.id);
-
+    const asgn = O.filter(o => o.asgn === v.id);
     v.stops = interleave(v, asgn);
-
-    v.cur=0;
-    v.load=0;
-
-    if(v.stops.length)
-      v.status='active';
+    v.cur = 0; v.load = 0;
+    if (v.stops.length) v.status = 'active';
   });
 
-  addLog(
-    `Dispatched ${nVeh} vehicles with ${nOrd} pre-assigned orders`,
-    '#00e5ff'
-  );
-
+  addLog(`Dispatched ${nVeh} vehicles with ${nOrd} pre-assigned orders`, '#00e5ff');
   setStatus(`${nVeh} vehicles active`, true);
-
-  running=true;
-
-  document.getElementById('bInj').disabled=false;
-
-  lastT=0;
-
-  if(raf) cancelAnimationFrame(raf);
-
-  raf=requestAnimationFrame(tick);
-}
-
-function dispatchQueuedOrders() {
-
-  if(Q.length < 3) return;
-
-  const idleVehicles = V.filter(v => v.status === 'idle');
-
-  if(!idleVehicles.length) return;
-
-  const batch = Q.splice(0,3);
-
-  const center = {
-    x: batch.reduce((s,o)=>s+o.pickup.x,0)/batch.length,
-    y: batch.reduce((s,o)=>s+o.pickup.y,0)/batch.length
-  };
-
-  let best = idleVehicles[0];
-  let bestDist = Infinity;
-
-  for(const v of idleVehicles){
-
-    const d = dst(v, center);
-
-    if(d < bestDist){
-      bestDist = d;
-      best = v;
-    }
-  }
-
-  batch.forEach(o=>{
-    o.asgn = best.id;
-    O.push(o);
-  });
-
-  best.stops = interleave(best, batch);
-  best.cur = 0;
-  best.load = 0;
-  best.status = 'active';
-  best.trail = [];
-
-  nQ = Q.length;
-
-  addLog(
-    `V${best.id+1} dispatched with ${batch.length} queued orders`,
-    '#f59e0b'
-  );
-
-  updStats();
+  running = true;
+  document.getElementById('bInj').disabled = false;
+  lastT = 0;
+  if (raf) cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
 }
 
 function tick(ts) {
-
-  if(!running){
-    raf=null;
-    return;
-  }
-
-  const dt = lastT===0 ? 16 : Math.min(ts-lastT,50);
-
-  lastT=ts;
-
+  if (!running) { raf = null; return; }
+  const dt = lastT === 0 ? 16 : Math.min(ts - lastT, 50);
+  lastT = ts;
   const spd = +document.getElementById('spd').value;
+  const step = spd * 2.2 * (dt / 16);
 
-  const step = spd * 2.2 * (dt/16);
-
-  let activeCount=0;
-
-  for(const v of V){
-
-    if(v.status !== 'active') continue;
-
+  let activeCount = 0;
+  for (const v of V) {
+    if (v.status !== 'active') continue;
     activeCount++;
-
-    if(v.cur >= v.stops.length){
-      v.status='idle';
-      dispatchQueuedOrders();
-      continue;
-    }
-
+    if (v.cur >= v.stops.length) { v.status = 'idle'; assignQueue(v); continue; }
     const s = v.stops[v.cur];
-
-    if(s.done){
-      v.cur++;
-      continue;
-    }
-
-    const d = dst(v,s.pt);
-
-    if(d<5){
-
-      v.x=s.pt.x;
-      v.y=s.pt.y;
-
-      s.done=true;
-
-      if(s.t==='p'){
-        s.o.pickedUp=true;
-        s.o.status='picked';
-        v.load++;
-        nPick++;
-
-        addLog(
-          `V${v.id+1} picked up order #${s.o.id}`,
-          v.col
-        );
-
+    if (s.done) { v.cur++; continue; }
+    const d = dst(v, s.pt);
+    if (d < 5) {
+      v.x = s.pt.x; v.y = s.pt.y; s.done = true;
+      if (s.t === 'p') {
+        s.o.pickedUp = true; s.o.status = 'picked'; v.load++; nPick++;
+        addLog(`V${v.id + 1} picked up order #${s.o.id}`, v.col);
       } else {
-
-        s.o.delivered=true;
-        s.o.status='done';
-
-        v.load=Math.max(0,v.load-1);
-
-        nDel++;
-
-        addLog(
-          `V${v.id+1} delivered order #${s.o.id}`,
-          '#22c55e'
-        );
+        s.o.delivered = true; s.o.status = 'done'; v.load = Math.max(0, v.load - 1); nDel++;
+        addLog(`V${v.id + 1} delivered order #${s.o.id}`, '#22c55e');
       }
-
       v.cur++;
-
     } else {
-
-      const spf=Math.min(step*3,d);
-
-      v.trail.push({x:v.x,y:v.y});
-
-      if(v.trail.length>20)
-        v.trail.shift();
-
-      v.x += (s.pt.x-v.x)/d*spf;
-      v.y += (s.pt.y-v.y)/d*spf;
+      const spf = Math.min(step * 3, d);
+      v.trail.push({ x: v.x, y: v.y });
+      if (v.trail.length > 20) v.trail.shift();
+      v.x += (s.pt.x - v.x) / d * spf;
+      v.y += (s.pt.y - v.y) / d * spf;
     }
   }
 
   updStats();
-
   draw();
 
-  const allDone =
-    V.every(v=>v.status==='idle') &&
-    Q.length===0;
+  const allDone = V.every(v => v.status === 'idle') && Q.length === 0;
+  if (allDone && running) setStatus('All routes complete', false);
+  else setStatus(`${activeCount} vehicle${activeCount !== 1 ? 's' : ''} active · ${nDel} delivered`, true);
 
-  if(allDone && running)
-    setStatus('All routes complete', false);
-  else
-    setStatus(
-      `${activeCount} vehicle${activeCount!==1?'s':''} active · ${nDel} delivered`,
-      true
-    );
+  raf = requestAnimationFrame(tick);
+}
 
-  raf=requestAnimationFrame(tick);
+function assignQueue(v) {
+  if (!Q.length) return;
+  const batch = Q.splice(0, Math.min(5, Q.length));
+  batch.forEach(o => { o.asgn = v.id; o.status = 'pending'; O.push(o); });
+  nQ = Math.max(0, nQ - batch.length);
+  v.stops = interleave(v, batch);
+  v.cur = 0; v.load = 0; v.status = 'active';
+  addLog(`V${v.id + 1} picked up ${batch.length} queued order${batch.length > 1 ? 's' : ''}`, '#f59e0b');
+  updStats();
 }
 
 function inject() {
+  const o = { id: 1000 + Math.floor(Math.random() * 9000), pickup: rp(), delivery: rp(),
+    status: 'pending', asgn: -1, live: true, pickedUp: false, delivered: false };
 
-  const o = {
-    id:1000 + Math.floor(Math.random()*9000),
-    pickup:rp(),
-    delivery:rp(),
-    status:'pending',
-    asgn:-1,
-    live:true,
-    pickedUp:false,
-    delivered:false
-  };
+  const PROXIMITY = Math.min(W, H) * 0.22;
 
-  const PROXIMITY = Math.min(W,H)*0.22;
+  const sorted = [...V].sort((a, b) => dst(a, o.pickup) - dst(b, o.pickup));
 
-  const sorted = [...V].sort(
-    (a,b)=>dst(a,o.pickup)-dst(b,o.pickup)
-  );
+  let done = false;
+  for (const v of sorted) {
+    const distToPickup = dst(v, o.pickup);
 
-  let done=false;
-
-  for(const v of sorted){
-
-    if(v.status !== 'active')
+    if (v.status === 'idle') {
+      if (distToPickup <= PROXIMITY) {
+        o.asgn = v.id; O.push(o);
+        v.stops = interleave(v, [o]);
+        v.cur = 0; v.load = 0; v.status = 'active'; v.trail = [];
+        nInj++;
+        addLog(`Live #${o.id} → V${v.id + 1} (idle, nearby direct assign)`, '#ec4899');
+        done = true; break;
+      }
       continue;
+    }
 
-    const rem = v.stops
-      .slice(v.cur)
-      .filter(s=>!s.done);
+    if (v.status === 'active') {
+      const rem = v.stops.slice(v.cur).filter(s => !s.done);
+      if (!rem.length) continue;
 
-    if(!rem.length)
-      continue;
+      const capOk = v.load + 1 <= v.cap;
+      if (!capOk) continue;
 
-    const capOk = v.load + 1 <= v.cap;
+      // Check if route corridor passes near both pickup AND delivery
+      const nearPickup = rem.some(s => dst(s.pt, o.pickup) < PROXIMITY);
+      const nearDelivery = rem.some(s => dst(s.pt, o.delivery) < PROXIMITY);
 
-    if(!capOk)
-      continue;
+      if (!nearPickup && !nearDelivery) continue;
 
-    const nearPickup =
-      rem.some(s=>dst(s.pt,o.pickup)<PROXIMITY);
+      // Find best insertion point
+      const before = rem.reduce((s, r, i) => {
+        const p = i ? rem[i - 1].pt : { x: v.x, y: v.y };
+        return s + dst(p, r.pt);
+      }, 0);
 
-    const nearDelivery =
-      rem.some(s=>dst(s.pt,o.delivery)<PROXIMITY);
+      let bestInsert = 0, bestExtra = Infinity;
+      for (let i = 0; i <= rem.length; i++) {
+        const prev = i === 0 ? { x: v.x, y: v.y } : rem[i - 1].pt;
+        const next = i < rem.length ? rem[i].pt : null;
+        const added = dst(prev, o.pickup) + dst(o.pickup, o.delivery) + (next ? dst(o.delivery, next) : 0) - (next ? dst(prev, next) : 0);
+        if (added < bestExtra) { bestExtra = added; bestInsert = i; }
+      }
 
-    if(!nearPickup && !nearDelivery)
-      continue;
-
-    const before = rem.reduce((s,r,i)=>{
-      const p = i
-        ? rem[i-1].pt
-        : {x:v.x,y:v.y};
-
-      return s + dst(p,r.pt);
-
-    },0);
-
-    let bestInsert=0;
-    let bestExtra=Infinity;
-
-    for(let i=0;i<=rem.length;i++){
-
-      const prev =
-        i===0
-        ? {x:v.x,y:v.y}
-        : rem[i-1].pt;
-
-      const next =
-        i<rem.length
-        ? rem[i].pt
-        : null;
-
-      const added =
-        dst(prev,o.pickup) +
-        dst(o.pickup,o.delivery) +
-        (next ? dst(o.delivery,next) : 0) -
-        (next ? dst(prev,next) : 0);
-
-      if(added<bestExtra){
-        bestExtra=added;
-        bestInsert=i;
+      const pct = before > 0 ? bestExtra / before : 1;
+      if (pct <= 0.40) {
+        o.asgn = v.id; O.push(o);
+        const ins = v.cur + bestInsert;
+        v.stops.splice(ins, 0,
+          { t: 'p', o, pt: { ...o.pickup }, done: false },
+          { t: 'd', o, pt: { ...o.delivery }, done: false }
+        );
+        nInj++;
+        addLog(`Live #${o.id} → V${v.id + 1} (route match +${Math.round(pct * 100)}% detour)`, '#ec4899');
+        done = true; break;
       }
     }
-
-    const pct = before>0
-      ? bestExtra/before
-      : 1;
-
-    if(pct <= 0.40){
-
-      o.asgn=v.id;
-
-      O.push(o);
-
-      const ins=v.cur+bestInsert;
-
-      v.stops.splice(
-        ins,
-        0,
-        {t:'p',o,pt:{...o.pickup},done:false},
-        {t:'d',o,pt:{...o.delivery},done:false}
-      );
-
-      nInj++;
-
-      addLog(
-        `Live #${o.id} → V${v.id+1} (+${Math.round(pct*100)}% detour)`,
-        '#ec4899'
-      );
-
-      done=true;
-
-      break;
-    }
   }
 
-  if(!done){
-
-    Q.push(o);
-
-    nQ++;
-
-    addLog(
-      `Live #${o.id} added to queue`,
-      '#f59e0b'
-    );
-
-    dispatchQueuedOrders();
+  if (!done) {
+    Q.push(o); nQ++;
+    addLog(`Live #${o.id} → queued (no vehicle matched)`, '#f59e0b');
   }
-
   updStats();
 }
 
-/* KEEP YOUR EXISTING draw(), drawGrid(), reset, button events BELOW */
-/* ONLY replace the previous script logic with this updated one */
+function drawGrid() {
+  const gridSize = 60;
+  cx.strokeStyle = 'rgba(255,255,255,0.03)';
+  cx.lineWidth = 1;
+  for (let x = 0; x < W; x += gridSize) {
+    cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, H); cx.stroke();
+  }
+  for (let y = 0; y < H; y += gridSize) {
+    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(W, y); cx.stroke();
+  }
+
+  // Road-like horizontal lines
+  cx.strokeStyle = 'rgba(255,255,255,0.055)';
+  cx.lineWidth = 6;
+  const roads = [0.2, 0.45, 0.7];
+  roads.forEach(r => {
+    cx.beginPath(); cx.moveTo(0, H * r); cx.lineTo(W, H * r); cx.stroke();
+    cx.beginPath(); cx.moveTo(W * r, 0); cx.lineTo(W * r, H); cx.stroke();
+  });
+}
+
+function draw() {
+  cx.clearRect(0, 0, W, H);
+
+  // Background
+  cx.fillStyle = '#0a0c10';
+  cx.fillRect(0, 0, W, H);
+
+  drawGrid();
+
+  // Route lines
+  cx.setLineDash([4, 6]);
+  for (const v of V) {
+    if (v.status !== 'active') continue;
+    const rem = v.stops.slice(v.cur).filter(s => !s.done);
+    if (!rem.length) continue;
+    cx.beginPath();
+    cx.strokeStyle = v.col + '33';
+    cx.lineWidth = 1.5;
+    cx.moveTo(v.x, v.y);
+    for (const s of rem) cx.lineTo(s.pt.x, s.pt.y);
+    cx.stroke();
+  }
+  cx.setLineDash([]);
+
+  // Vehicle trails
+  for (const v of V) {
+    if (v.trail.length < 2) continue;
+    cx.beginPath();
+    cx.moveTo(v.trail[0].x, v.trail[0].y);
+    for (let i = 1; i < v.trail.length; i++) {
+      cx.lineTo(v.trail[i].x, v.trail[i].y);
+    }
+    cx.strokeStyle = v.col + '22';
+    cx.lineWidth = 2;
+    cx.stroke();
+  }
+
+  // Orders
+  for (const o of O) {
+    if (o.delivered) continue;
+
+    // Pickup
+    if (!o.pickedUp) {
+      const c = o.live ? '#ec4899' : '#22c55e';
+      cx.beginPath();
+      cx.arc(o.pickup.x, o.pickup.y, 6, 0, Math.PI * 2);
+      cx.fillStyle = c + 'cc';
+      cx.fill();
+      cx.strokeStyle = c;
+      cx.lineWidth = 1.5;
+      cx.stroke();
+
+      // Pulse ring
+      cx.beginPath();
+      cx.arc(o.pickup.x, o.pickup.y, 10, 0, Math.PI * 2);
+      cx.strokeStyle = c + '33';
+      cx.lineWidth = 1;
+      cx.stroke();
+
+      cx.font = '8px monospace';
+      cx.fillStyle = c;
+      cx.textAlign = 'center';
+      cx.fillText('P' + o.id, o.pickup.x, o.pickup.y - 10);
+    }
+
+    // Delivery triangle
+    if (o.pickedUp && !o.delivered) {
+      const c = o.live ? '#ec4899' : '#f97316';
+      const x = o.delivery.x, y = o.delivery.y;
+      cx.beginPath();
+      cx.moveTo(x, y - 8);
+      cx.lineTo(x + 7, y + 5);
+      cx.lineTo(x - 7, y + 5);
+      cx.closePath();
+      cx.fillStyle = c + 'cc';
+      cx.fill();
+      cx.strokeStyle = c;
+      cx.lineWidth = 1.5;
+      cx.stroke();
+      cx.font = '8px monospace';
+      cx.fillStyle = c;
+      cx.textAlign = 'center';
+      cx.fillText('D' + o.id, x, y - 13);
+    }
+  }
+
+  // Queued orders
+  for (const o of Q) {
+    cx.beginPath();
+    cx.rect(o.pickup.x - 6, o.pickup.y - 6, 12, 12);
+    cx.fillStyle = '#f59e0b88';
+    cx.fill();
+    cx.strokeStyle = '#f59e0b';
+    cx.lineWidth = 1.5;
+    cx.stroke();
+    cx.font = '8px monospace';
+    cx.fillStyle = '#f59e0b';
+    cx.textAlign = 'center';
+    cx.fillText('Q', o.pickup.x, o.pickup.y - 10);
+  }
+
+  // Vehicles
+  for (const v of V) {
+    const isIdle = v.status === 'idle';
+    const col = isIdle ? '#374151' : v.col;
+
+    if (!isIdle) {
+      cx.beginPath();
+      cx.arc(v.x, v.y, 15, 0, Math.PI * 2);
+      cx.fillStyle = v.col + '18';
+      cx.fill();
+    }
+
+    cx.beginPath();
+    cx.arc(v.x, v.y, 10, 0, Math.PI * 2);
+    cx.fillStyle = isIdle ? '#1f2937' : col;
+    cx.fill();
+    cx.strokeStyle = col;
+    cx.lineWidth = isIdle ? 1 : 1.5;
+    cx.stroke();
+
+    cx.font = 'bold 9px monospace';
+    cx.fillStyle = isIdle ? '#6b7280' : '#000';
+    cx.textAlign = 'center';
+    cx.fillText(v.id + 1, v.x, v.y + 3.5);
+
+    if (!isIdle) {
+      cx.font = '8px monospace';
+      cx.fillStyle = col;
+      cx.fillText(v.load + '/' + v.cap, v.x, v.y + 22);
+    }
+  }
+}
+
+// Events
+document.getElementById('nV').oninput = e => document.getElementById('vv').textContent = e.target.value;
+document.getElementById('nO').oninput = e => document.getElementById('ov').textContent = e.target.value;
+document.getElementById('spd').oninput = e => document.getElementById('sv').textContent = e.target.value + '×';
+
+document.getElementById('bGen').onclick = () => {
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  running = false;
+  setTimeout(generate, 20);
+};
+
+document.getElementById('bInj').onclick = inject;
+
+document.getElementById('bRst').onclick = () => {
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  running = false;
+  V = []; O = []; Q = [];
+  nDel = 0; nPick = 0; nInj = 0; nQ = 0;
+  updStats();
+  document.getElementById('log').innerHTML = '<div class="log-empty">— awaiting dispatch —</div>';
+  document.getElementById('bInj').disabled = true;
+  setStatus('Ready to dispatch', false);
+  cx.clearRect(0, 0, W, H);
+  cx.fillStyle = '#0a0c10';
+  cx.fillRect(0, 0, W, H);
+  drawGrid();
+};
+
+// Init
+cx.fillStyle = '#0a0c10';
+cx.fillRect(0, 0, W, H);
+drawGrid();
 </script>
 </body>
 </html>
