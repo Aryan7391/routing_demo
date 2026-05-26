@@ -1,0 +1,904 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SmartRoute — Live Routing Demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0c10;
+  --surface: #111318;
+  --surface2: #181c24;
+  --border: rgba(255,255,255,0.07);
+  --accent: #00e5ff;
+  --accent2: #7c3aed;
+  --green: #22c55e;
+  --orange: #f97316;
+  --pink: #ec4899;
+  --amber: #f59e0b;
+  --red: #ef4444;
+  --text: #f0f4ff;
+  --muted: #6b7280;
+  --mono: 'Space Mono', monospace;
+  --sans: 'Syne', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* noise overlay */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
+
+header {
+  padding: 24px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  z-index: 10;
+}
+
+.logo {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--text);
+}
+
+.logo span { color: var(--accent); }
+
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 2px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.main {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 0;
+  height: calc(100vh - 65px);
+  position: relative;
+  z-index: 1;
+}
+
+/* Canvas area */
+.canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+}
+
+canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.canvas-label {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Sidebar */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow-y: auto;
+  background: var(--surface);
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.section {
+  padding: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 14px;
+}
+
+/* Controls */
+.ctrl-group { margin-bottom: 14px; }
+.ctrl-group:last-child { margin-bottom: 0; }
+
+.ctrl-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 6px;
+  font-family: var(--mono);
+}
+
+.ctrl-label span {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+input[type=range] {
+  width: 100%;
+  height: 2px;
+  appearance: none;
+  background: var(--border);
+  border-radius: 1px;
+  outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--accent);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 8px var(--accent);
+}
+
+input[type=range]::-webkit-slider-thumb:hover {
+  box-shadow: 0 0 16px var(--accent);
+}
+
+/* Buttons */
+.btn-group { display: flex; flex-direction: column; gap: 8px; }
+
+button {
+  width: 100%;
+  padding: 10px 16px;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #000;
+  border-color: var(--accent);
+}
+.btn-primary:hover { box-shadow: 0 0 20px rgba(0,229,255,0.4); }
+.btn-primary:active { transform: scale(0.98); }
+.btn-primary:disabled { opacity: 0.3; cursor: not-allowed; box-shadow: none; }
+
+.btn-inject {
+  background: transparent;
+  color: var(--pink);
+  border-color: var(--pink);
+}
+.btn-inject:hover:not(:disabled) { background: rgba(236,72,153,0.1); box-shadow: 0 0 16px rgba(236,72,153,0.2); }
+.btn-inject:disabled { opacity: 0.25; cursor: not-allowed; }
+
+.btn-reset {
+  background: transparent;
+  color: var(--muted);
+  border-color: var(--border);
+  font-size: 12px;
+}
+.btn-reset:hover { color: var(--text); border-color: var(--muted); }
+
+/* Stats */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px 12px;
+}
+
+.stat-val {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+
+.stat-lbl {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: var(--mono);
+  letter-spacing: 0.5px;
+}
+
+.sv-delivered { color: var(--green); }
+.sv-picked { color: var(--accent); }
+.sv-injected { color: var(--pink); }
+.sv-queued { color: var(--amber); }
+
+/* Legend */
+.legend { display: flex; flex-direction: column; gap: 8px; }
+
+.leg-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.leg-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Log */
+.log {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 120px;
+  max-height: 220px;
+}
+
+.log::-webkit-scrollbar { width: 3px; }
+.log::-webkit-scrollbar-thumb { background: var(--border); }
+
+.log-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  letter-spacing: 1px;
+}
+
+.log-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--muted);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  padding: 16px 20px 8px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.le {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+  line-height: 1.5;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.le-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.le-text { flex: 1; }
+.le-time { color: rgba(255,255,255,0.2); flex-shrink: 0; }
+
+/* Pulse animation for active vehicles */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.status-bar {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+}
+
+.status-dot.active { animation: pulse 1.5s infinite; }
+.status-dot.idle { background: var(--muted); animation: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Smart<span>Route</span></div>
+  <div class="badge">Live Demo</div>
+</header>
+
+<div class="main">
+  <div class="canvas-wrap">
+    <canvas id="c"></canvas>
+    <div class="canvas-label">City Grid — Real-time routing simulation</div>
+    <div class="status-bar">
+      <div class="status-dot idle" id="statusDot"></div>
+      <span id="statusText">Ready to dispatch</span>
+    </div>
+  </div>
+
+  <div class="sidebar">
+
+    <div class="section">
+      <div class="section-title">Parameters</div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Vehicles <span id="vv">4</span></div>
+        <input type="range" id="nV" min="2" max="10" value="4" step="1">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Pre-orders <span id="ov">10</span></div>
+        <input type="range" id="nO" min="4" max="30" value="10" step="1">
+      </div>
+      <div class="ctrl-group">
+        <div class="ctrl-label">Speed <span id="sv">2×</span></div>
+        <input type="range" id="spd" min="1" max="5" value="2" step="1">
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Controls</div>
+      <div class="btn-group">
+        <button class="btn-primary" id="bGen">▶ Generate &amp; Dispatch</button>
+        <button class="btn-inject" id="bInj" disabled>+ Inject Live Order</button>
+        <button class="btn-reset" id="bRst">↺ Reset</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Stats</div>
+      <div class="stats-grid">
+        <div class="stat">
+          <div class="stat-val sv-delivered" id="sd">0</div>
+          <div class="stat-lbl">Delivered</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val sv-picked" id="sp">0</div>
+          <div class="stat-lbl">Picked up</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val sv-injected" id="si">0</div>
+          <div class="stat-lbl">Injected</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val sv-queued" id="sq">0</div>
+          <div class="stat-lbl">Queued</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Legend</div>
+      <div class="legend">
+        <div class="leg-item">
+          <div class="leg-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="#00e5ff" opacity="0.9"/><text x="9" y="13" text-anchor="middle" font-size="8" fill="#000" font-family="monospace" font-weight="700">V</text></svg>
+          </div>
+          Vehicle (active)
+        </div>
+        <div class="leg-item">
+          <div class="leg-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="7" fill="#374151" opacity="0.8"/><text x="9" y="13" text-anchor="middle" font-size="8" fill="#9ca3af" font-family="monospace" font-weight="700">V</text></svg>
+          </div>
+          Vehicle (idle)
+        </div>
+        <div class="leg-item">
+          <div class="leg-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="6" fill="#22c55e" opacity="0.85"/></svg>
+          </div>
+          Pickup pending
+        </div>
+        <div class="leg-item">
+          <div class="leg-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18"><polygon points="9,2 16,14 2,14" fill="#f97316" opacity="0.85"/></svg>
+          </div>
+          Delivery pending
+        </div>
+        <div class="leg-item">
+          <div class="leg-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18"><circle cx="9" cy="9" r="6" fill="#ec4899" opacity="0.85"/></svg>
+          </div>
+          Live injected
+        </div>
+        <div class="leg-item">
+          <div class="leg-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18"><rect x="3" y="3" width="12" height="12" rx="2" fill="#f59e0b" opacity="0.8"/></svg>
+          </div>
+          Queued order
+        </div>
+      </div>
+    </div>
+
+    <div class="log-title">Activity Log</div>
+    <div class="log" id="log">
+      <div class="log-empty">— awaiting dispatch —</div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById('c');
+const cx = cv.getContext('2d');
+let W, H;
+
+function resize() {
+  const wrap = cv.parentElement;
+  W = wrap.clientWidth;
+  H = wrap.clientHeight;
+  cv.width = W;
+  cv.height = H;
+}
+resize();
+window.addEventListener('resize', () => { resize(); draw(); });
+
+const PAD = 50;
+let V = [], O = [], Q = [];
+let nDel = 0, nPick = 0, nInj = 0, nQ = 0;
+let running = false, raf = null, lastT = 0;
+
+const VCOLS = ['#00e5ff','#22c55e','#f97316','#a78bfa','#34d399','#fb923c','#38bdf8','#c084fc','#4ade80','#f472b6'];
+
+function rnd(a, b) { return a + Math.random() * (b - a); }
+function dst(a, b) { const dx = a.x - b.x, dy = a.y - b.y; return Math.sqrt(dx * dx + dy * dy); }
+function rp() { return { x: rnd(PAD, W - PAD), y: rnd(PAD, H - PAD) }; }
+
+function setStatus(text, active) {
+  document.getElementById('statusText').textContent = text;
+  const dot = document.getElementById('statusDot');
+  dot.className = 'status-dot ' + (active ? 'active' : 'idle');
+}
+
+function addLog(msg, color) {
+  const el = document.getElementById('log');
+  const empty = el.querySelector('.log-empty');
+  if (empty) empty.remove();
+  const d = document.createElement('div');
+  d.className = 'le';
+  const t = new Date().toLocaleTimeString('en', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  d.innerHTML = `<div class="le-dot" style="background:${color}"></div><div class="le-text">${msg}</div><div class="le-time">${t}</div>`;
+  el.insertBefore(d, el.firstChild);
+  while (el.children.length > 60) el.removeChild(el.lastChild);
+}
+
+function updStats() {
+  document.getElementById('sd').textContent = nDel;
+  document.getElementById('sp').textContent = nPick;
+  document.getElementById('si').textContent = nInj;
+  document.getElementById('sq').textContent = nQ;
+}
+
+function interleave(veh, orders) {
+  const stops = [];
+  let pos = { x: veh.x, y: veh.y }, load = 0;
+  const unassigned = [...orders], inVeh = [];
+  while (unassigned.length || inVeh.length) {
+    const cands = [];
+    for (const o of unassigned) if (load + 1 <= veh.cap) cands.push({ t: 'p', o, pt: o.pickup });
+    for (const o of inVeh) cands.push({ t: 'd', o, pt: o.delivery });
+    if (!cands.length) break;
+    cands.sort((a, b) => dst(pos, a.pt) - dst(pos, b.pt));
+    const nx = cands[0];
+    if (nx.t === 'p') { load++; inVeh.push(nx.o); unassigned.splice(unassigned.indexOf(nx.o), 1); }
+    else { load--; inVeh.splice(inVeh.indexOf(nx.o), 1); }
+    stops.push({ t: nx.t, o: nx.o, pt: { ...nx.pt }, done: false });
+    pos = { ...nx.pt };
+  }
+  return stops;
+}
+
+function generate() {
+  const nVeh = +document.getElementById('nV').value;
+  const nOrd = +document.getElementById('nO').value;
+  V = []; O = []; Q = [];
+  nDel = 0; nPick = 0; nInj = 0; nQ = 0;
+  document.getElementById('log').innerHTML = '<div class="log-empty">— dispatching —</div>';
+  updStats();
+
+  for (let i = 0; i < nVeh; i++) {
+    const p = rp();
+    V.push({ id: i, x: p.x, y: p.y, col: VCOLS[i % VCOLS.length],
+      stops: [], cur: 0, load: 0, cap: 5 + Math.floor(Math.random() * 5), status: 'idle', trail: [] });
+  }
+
+  for (let i = 0; i < nOrd; i++) {
+    O.push({ id: i, pickup: rp(), delivery: rp(),
+      status: 'pending', asgn: -1, live: false, pickedUp: false, delivered: false });
+  }
+
+  O.forEach(o => {
+    let best = -1, bd = Infinity;
+    V.forEach((v, i) => { const d = dst(v, o.pickup); if (d < bd) { bd = d; best = i; } });
+    o.asgn = best;
+  });
+
+  V.forEach(v => {
+    const asgn = O.filter(o => o.asgn === v.id);
+    v.stops = interleave(v, asgn);
+    v.cur = 0; v.load = 0;
+    if (v.stops.length) v.status = 'active';
+  });
+
+  addLog(`Dispatched ${nVeh} vehicles with ${nOrd} pre-assigned orders`, '#00e5ff');
+  setStatus(`${nVeh} vehicles active`, true);
+  running = true;
+  document.getElementById('bInj').disabled = false;
+  lastT = 0;
+  if (raf) cancelAnimationFrame(raf);
+  raf = requestAnimationFrame(tick);
+}
+
+function tick(ts) {
+  if (!running) { raf = null; return; }
+  const dt = lastT === 0 ? 16 : Math.min(ts - lastT, 50);
+  lastT = ts;
+  const spd = +document.getElementById('spd').value;
+  const step = spd * 2.2 * (dt / 16);
+
+  let activeCount = 0;
+  for (const v of V) {
+    if (v.status !== 'active') continue;
+    activeCount++;
+    if (v.cur >= v.stops.length) { v.status = 'idle'; assignQueue(v); continue; }
+    const s = v.stops[v.cur];
+    if (s.done) { v.cur++; continue; }
+    const d = dst(v, s.pt);
+    if (d < 5) {
+      v.x = s.pt.x; v.y = s.pt.y; s.done = true;
+      if (s.t === 'p') {
+        s.o.pickedUp = true; s.o.status = 'picked'; v.load++; nPick++;
+        addLog(`V${v.id + 1} picked up order #${s.o.id}`, v.col);
+      } else {
+        s.o.delivered = true; s.o.status = 'done'; v.load = Math.max(0, v.load - 1); nDel++;
+        addLog(`V${v.id + 1} delivered order #${s.o.id}`, '#22c55e');
+      }
+      v.cur++;
+    } else {
+      const spf = Math.min(step * 3, d);
+      v.trail.push({ x: v.x, y: v.y });
+      if (v.trail.length > 20) v.trail.shift();
+      v.x += (s.pt.x - v.x) / d * spf;
+      v.y += (s.pt.y - v.y) / d * spf;
+    }
+  }
+
+  updStats();
+  draw();
+
+  const allDone = V.every(v => v.status === 'idle') && Q.length === 0;
+  if (allDone && running) setStatus('All routes complete', false);
+  else setStatus(`${activeCount} vehicle${activeCount !== 1 ? 's' : ''} active · ${nDel} delivered`, true);
+
+  raf = requestAnimationFrame(tick);
+}
+
+function assignQueue(v) {
+  if (!Q.length) return;
+  const batch = Q.splice(0, Math.min(5, Q.length));
+  batch.forEach(o => { o.asgn = v.id; o.status = 'pending'; O.push(o); });
+  nQ = Math.max(0, nQ - batch.length);
+  v.stops = interleave(v, batch);
+  v.cur = 0; v.load = 0; v.status = 'active';
+  addLog(`V${v.id + 1} picked up ${batch.length} queued order${batch.length > 1 ? 's' : ''}`, '#f59e0b');
+  updStats();
+}
+
+function inject() {
+  const o = { id: 1000 + Math.floor(Math.random() * 9000), pickup: rp(), delivery: rp(),
+    status: 'pending', asgn: -1, live: true, pickedUp: false, delivered: false };
+
+  const PROXIMITY = Math.min(W, H) * 0.22;
+
+  const sorted = [...V].sort((a, b) => dst(a, o.pickup) - dst(b, o.pickup));
+
+  let done = false;
+  for (const v of sorted) {
+    const distToPickup = dst(v, o.pickup);
+
+    if (v.status === 'idle') {
+      if (distToPickup <= PROXIMITY) {
+        o.asgn = v.id; O.push(o);
+        v.stops = interleave(v, [o]);
+        v.cur = 0; v.load = 0; v.status = 'active'; v.trail = [];
+        nInj++;
+        addLog(`Live #${o.id} → V${v.id + 1} (idle, nearby direct assign)`, '#ec4899');
+        done = true; break;
+      }
+      continue;
+    }
+
+    if (v.status === 'active') {
+      const rem = v.stops.slice(v.cur).filter(s => !s.done);
+      if (!rem.length) continue;
+
+      const capOk = v.load + 1 <= v.cap;
+      if (!capOk) continue;
+
+      // Check if route corridor passes near both pickup AND delivery
+      const nearPickup = rem.some(s => dst(s.pt, o.pickup) < PROXIMITY);
+      const nearDelivery = rem.some(s => dst(s.pt, o.delivery) < PROXIMITY);
+
+      if (!nearPickup && !nearDelivery) continue;
+
+      // Find best insertion point
+      const before = rem.reduce((s, r, i) => {
+        const p = i ? rem[i - 1].pt : { x: v.x, y: v.y };
+        return s + dst(p, r.pt);
+      }, 0);
+
+      let bestInsert = 0, bestExtra = Infinity;
+      for (let i = 0; i <= rem.length; i++) {
+        const prev = i === 0 ? { x: v.x, y: v.y } : rem[i - 1].pt;
+        const next = i < rem.length ? rem[i].pt : null;
+        const added = dst(prev, o.pickup) + dst(o.pickup, o.delivery) + (next ? dst(o.delivery, next) : 0) - (next ? dst(prev, next) : 0);
+        if (added < bestExtra) { bestExtra = added; bestInsert = i; }
+      }
+
+      const pct = before > 0 ? bestExtra / before : 1;
+      if (pct <= 0.40) {
+        o.asgn = v.id; O.push(o);
+        const ins = v.cur + bestInsert;
+        v.stops.splice(ins, 0,
+          { t: 'p', o, pt: { ...o.pickup }, done: false },
+          { t: 'd', o, pt: { ...o.delivery }, done: false }
+        );
+        nInj++;
+        addLog(`Live #${o.id} → V${v.id + 1} (route match +${Math.round(pct * 100)}% detour)`, '#ec4899');
+        done = true; break;
+      }
+    }
+  }
+
+  if (!done) {
+    Q.push(o); nQ++;
+    addLog(`Live #${o.id} → queued (no vehicle matched)`, '#f59e0b');
+  }
+  updStats();
+}
+
+function drawGrid() {
+  const gridSize = 60;
+  cx.strokeStyle = 'rgba(255,255,255,0.03)';
+  cx.lineWidth = 1;
+  for (let x = 0; x < W; x += gridSize) {
+    cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, H); cx.stroke();
+  }
+  for (let y = 0; y < H; y += gridSize) {
+    cx.beginPath(); cx.moveTo(0, y); cx.lineTo(W, y); cx.stroke();
+  }
+
+  // Road-like horizontal lines
+  cx.strokeStyle = 'rgba(255,255,255,0.055)';
+  cx.lineWidth = 6;
+  const roads = [0.2, 0.45, 0.7];
+  roads.forEach(r => {
+    cx.beginPath(); cx.moveTo(0, H * r); cx.lineTo(W, H * r); cx.stroke();
+    cx.beginPath(); cx.moveTo(W * r, 0); cx.lineTo(W * r, H); cx.stroke();
+  });
+}
+
+function draw() {
+  cx.clearRect(0, 0, W, H);
+
+  // Background
+  cx.fillStyle = '#0a0c10';
+  cx.fillRect(0, 0, W, H);
+
+  drawGrid();
+
+  // Route lines
+  cx.setLineDash([4, 6]);
+  for (const v of V) {
+    if (v.status !== 'active') continue;
+    const rem = v.stops.slice(v.cur).filter(s => !s.done);
+    if (!rem.length) continue;
+    cx.beginPath();
+    cx.strokeStyle = v.col + '33';
+    cx.lineWidth = 1.5;
+    cx.moveTo(v.x, v.y);
+    for (const s of rem) cx.lineTo(s.pt.x, s.pt.y);
+    cx.stroke();
+  }
+  cx.setLineDash([]);
+
+  // Vehicle trails
+  for (const v of V) {
+    if (v.trail.length < 2) continue;
+    cx.beginPath();
+    cx.moveTo(v.trail[0].x, v.trail[0].y);
+    for (let i = 1; i < v.trail.length; i++) {
+      cx.lineTo(v.trail[i].x, v.trail[i].y);
+    }
+    cx.strokeStyle = v.col + '22';
+    cx.lineWidth = 2;
+    cx.stroke();
+  }
+
+  // Orders
+  for (const o of O) {
+    if (o.delivered) continue;
+
+    // Pickup
+    if (!o.pickedUp) {
+      const c = o.live ? '#ec4899' : '#22c55e';
+      cx.beginPath();
+      cx.arc(o.pickup.x, o.pickup.y, 6, 0, Math.PI * 2);
+      cx.fillStyle = c + 'cc';
+      cx.fill();
+      cx.strokeStyle = c;
+      cx.lineWidth = 1.5;
+      cx.stroke();
+
+      // Pulse ring
+      cx.beginPath();
+      cx.arc(o.pickup.x, o.pickup.y, 10, 0, Math.PI * 2);
+      cx.strokeStyle = c + '33';
+      cx.lineWidth = 1;
+      cx.stroke();
+
+      cx.font = '8px monospace';
+      cx.fillStyle = c;
+      cx.textAlign = 'center';
+      cx.fillText('P' + o.id, o.pickup.x, o.pickup.y - 10);
+    }
+
+    // Delivery triangle
+    if (o.pickedUp && !o.delivered) {
+      const c = o.live ? '#ec4899' : '#f97316';
+      const x = o.delivery.x, y = o.delivery.y;
+      cx.beginPath();
+      cx.moveTo(x, y - 8);
+      cx.lineTo(x + 7, y + 5);
+      cx.lineTo(x - 7, y + 5);
+      cx.closePath();
+      cx.fillStyle = c + 'cc';
+      cx.fill();
+      cx.strokeStyle = c;
+      cx.lineWidth = 1.5;
+      cx.stroke();
+      cx.font = '8px monospace';
+      cx.fillStyle = c;
+      cx.textAlign = 'center';
+      cx.fillText('D' + o.id, x, y - 13);
+    }
+  }
+
+  // Queued orders
+  for (const o of Q) {
+    cx.beginPath();
+    cx.rect(o.pickup.x - 6, o.pickup.y - 6, 12, 12);
+    cx.fillStyle = '#f59e0b88';
+    cx.fill();
+    cx.strokeStyle = '#f59e0b';
+    cx.lineWidth = 1.5;
+    cx.stroke();
+    cx.font = '8px monospace';
+    cx.fillStyle = '#f59e0b';
+    cx.textAlign = 'center';
+    cx.fillText('Q', o.pickup.x, o.pickup.y - 10);
+  }
+
+  // Vehicles
+  for (const v of V) {
+    const isIdle = v.status === 'idle';
+    const col = isIdle ? '#374151' : v.col;
+
+    if (!isIdle) {
+      cx.beginPath();
+      cx.arc(v.x, v.y, 15, 0, Math.PI * 2);
+      cx.fillStyle = v.col + '18';
+      cx.fill();
+    }
+
+    cx.beginPath();
+    cx.arc(v.x, v.y, 10, 0, Math.PI * 2);
+    cx.fillStyle = isIdle ? '#1f2937' : col;
+    cx.fill();
+    cx.strokeStyle = col;
+    cx.lineWidth = isIdle ? 1 : 1.5;
+    cx.stroke();
+
+    cx.font = 'bold 9px monospace';
+    cx.fillStyle = isIdle ? '#6b7280' : '#000';
+    cx.textAlign = 'center';
+    cx.fillText(v.id + 1, v.x, v.y + 3.5);
+
+    if (!isIdle) {
+      cx.font = '8px monospace';
+      cx.fillStyle = col;
+      cx.fillText(v.load + '/' + v.cap, v.x, v.y + 22);
+    }
+  }
+}
+
+// Events
+document.getElementById('nV').oninput = e => document.getElementById('vv').textContent = e.target.value;
+document.getElementById('nO').oninput = e => document.getElementById('ov').textContent = e.target.value;
+document.getElementById('spd').oninput = e => document.getElementById('sv').textContent = e.target.value + '×';
+
+document.getElementById('bGen').onclick = () => {
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  running = false;
+  setTimeout(generate, 20);
+};
+
+document.getElementById('bInj').onclick = inject;
+
+document.getElementById('bRst').onclick = () => {
+  if (raf) { cancelAnimationFrame(raf); raf = null; }
+  running = false;
+  V = []; O = []; Q = [];
+  nDel = 0; nPick = 0; nInj = 0; nQ = 0;
+  updStats();
+  document.getElementById('log').innerHTML = '<div class="log-empty">— awaiting dispatch —</div>';
+  document.getElementById('bInj').disabled = true;
+  setStatus('Ready to dispatch', false);
+  cx.clearRect(0, 0, W, H);
+  cx.fillStyle = '#0a0c10';
+  cx.fillRect(0, 0, W, H);
+  drawGrid();
+};
+
+// Init
+cx.fillStyle = '#0a0c10';
+cx.fillRect(0, 0, W, H);
+drawGrid();
+</script>
+</body>
+</html>
